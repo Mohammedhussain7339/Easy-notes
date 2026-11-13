@@ -1,0 +1,365 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   THEME TOKENS
+   Each block below is the single source of truth for one visual theme.
+   `data-theme` is set on <html> by lib/useAppTheme.ts (and, before paint,
+   by the inline script in app/layout.tsx to avoid a flash).
+
+   Every theme MUST define the full variable set so components never fall
+   back to unstyled values. See lib/themes.ts for how new themes are
+   registered alongside these blocks.
+   ========================================================================== */
+
+:root,
+[data-theme="paper"] {
+  --color-canvas: #f6f4ef;
+  --bg-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(35, 36, 31, 0.05) 1px,
+    transparent 0
+  );
+  --bg-size: 22px 22px;
+
+  --color-surface: #fbfaf7;
+  --color-surface-solid: #fbfaf7;
+
+  --color-ink: #23241f;
+  --color-ink-soft: #5b5d54;
+  --color-ink-faint: #8b8d82;
+
+  --color-border: #e7e3d9;
+  --border-width: 1px;
+
+  --color-accent: #1f6f52;
+  --color-accent-hover: #175c43;
+  --color-on-accent: #fbfaf7;
+  --color-accent-soft: #eaf2ed;
+
+  --radius-card: 1.1rem;
+  --radius-control: 999px;
+
+  --shadow-card: 0 1px 2px rgba(35, 36, 31, 0.04),
+    0 6px 16px -8px rgba(35, 36, 31, 0.12);
+  --shadow-card-hover: 0 4px 10px rgba(35, 36, 31, 0.08),
+    0 14px 28px -10px rgba(35, 36, 31, 0.18);
+  --shadow-fab: 0 10px 24px -6px rgba(31, 111, 82, 0.55);
+  --shadow-pressed: inset 0 2px 4px rgba(35, 36, 31, 0.12);
+
+  --surface-blur: 0px;
+  --font-display: var(--font-serif);
+
+  --cat-personal: #c99a3d;
+  --cat-work: #1f6f52;
+  --cat-ideas: #75548f;
+  --cat-journal: #b4633f;
+  --cat-todo: #57667a;
+  --cat-other: #8b8d82;
+}
+
+[data-theme="minimalism"] {
+  --color-canvas: #ffffff;
+  --bg-image: none;
+  --bg-size: auto;
+
+  --color-surface: #ffffff;
+  --color-surface-solid: #ffffff;
+
+  --color-ink: #18181a;
+  --color-ink-soft: #68686d;
+  --color-ink-faint: #a3a3a8;
+
+  --color-border: #e9e9ec;
+  --border-width: 1px;
+
+  --color-accent: #17171a;
+  --color-accent-hover: #000000;
+  --color-on-accent: #ffffff;
+  --color-accent-soft: #f0f0f1;
+
+  --radius-card: 0.85rem;
+  --radius-control: 0.6rem;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.06);
+  --shadow-fab: 0 6px 18px rgba(0, 0, 0, 0.18);
+  --shadow-pressed: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+
+  --surface-blur: 0px;
+  --font-display: var(--font-sans);
+
+  --cat-personal: #a8834a;
+  --cat-work: #3d6e58;
+  --cat-ideas: #6e5a93;
+  --cat-journal: #a25d46;
+  --cat-todo: #55636f;
+  --cat-other: #8a8a8e;
+}
+
+[data-theme="glassmorphism"] {
+  --color-canvas: #dcebff;
+  --bg-image: linear-gradient(
+    160deg,
+    #dcebff 0%,
+    #ede4ff 55%,
+    #ffe3f0 100%
+  );
+  --bg-size: auto;
+
+  --color-surface: rgba(255, 255, 255, 0.38);
+  --color-surface-solid: rgba(255, 255, 255, 0.92);
+
+  --color-ink: #1e2233;
+  --color-ink-soft: rgba(30, 34, 51, 0.66);
+  --color-ink-faint: rgba(30, 34, 51, 0.42);
+
+  --color-border: rgba(255, 255, 255, 0.55);
+  --border-width: 1px;
+
+  --color-accent: #6c5ce7;
+  --color-accent-hover: #5a49d6;
+  --color-on-accent: #ffffff;
+  --color-accent-soft: rgba(108, 92, 231, 0.15);
+
+  --radius-card: 1.3rem;
+  --radius-control: 999px;
+
+  --shadow-card: 0 8px 32px rgba(31, 38, 135, 0.16);
+  --shadow-card-hover: 0 12px 40px rgba(31, 38, 135, 0.22);
+  --shadow-fab: 0 14px 30px -6px rgba(108, 92, 231, 0.55);
+  --shadow-pressed: inset 0 2px 6px rgba(31, 38, 135, 0.18);
+
+  --surface-blur: 20px;
+  --font-display: var(--font-sans);
+
+  --cat-personal: #e8a33d;
+  --cat-work: #12a587;
+  --cat-ideas: #8e6fe0;
+  --cat-journal: #e3705a;
+  --cat-todo: #3e8fd8;
+  --cat-other: #8894a8;
+}
+
+[data-theme="neumorphism"] {
+  --color-canvas: #e6e9ef;
+  --bg-image: none;
+  --bg-size: auto;
+
+  --color-surface: #e6e9ef;
+  --color-surface-solid: #e6e9ef;
+
+  --color-ink: #3b4252;
+  --color-ink-soft: #656d7c;
+  --color-ink-faint: #94999e;
+
+  --color-border: transparent;
+  --border-width: 0px;
+
+  --color-accent: #5c7cfa;
+  --color-accent-hover: #4c6be0;
+  --color-on-accent: #ffffff;
+  --color-accent-soft: rgba(92, 124, 250, 0.16);
+
+  --radius-card: 1.4rem;
+  --radius-control: 999px;
+
+  --shadow-card: 8px 8px 16px #c6cbd4, -8px -8px 16px #ffffff;
+  --shadow-card-hover: 10px 10px 22px #c1c6d0, -10px -10px 22px #ffffff;
+  --shadow-fab: 9px 9px 18px #c1c6d0, -9px -9px 18px #ffffff;
+  --shadow-pressed: inset 4px 4px 8px #c6cbd4, inset -4px -4px 8px #ffffff;
+
+  --surface-blur: 0px;
+  --font-display: var(--font-sans);
+
+  --cat-personal: #c08f4e;
+  --cat-work: #4e8c74;
+  --cat-ideas: #8577b0;
+  --cat-journal: #bc7a63;
+  --cat-todo: #6c7c93;
+  --cat-other: #9aa0a8;
+}
+
+[data-theme="dark-modern"] {
+  --color-canvas: #0e0f12;
+  --bg-image: none;
+  --bg-size: auto;
+
+  --color-surface: #1a1c21;
+  --color-surface-solid: #1f2126;
+
+  --color-ink: #ededef;
+  --color-ink-soft: #a2a6ad;
+  --color-ink-faint: #6b6f76;
+
+  --color-border: #2a2d33;
+  --border-width: 1px;
+
+  --color-accent: #34d399;
+  --color-accent-hover: #2bb984;
+  --color-on-accent: #06120d;
+  --color-accent-soft: rgba(52, 211, 153, 0.14);
+
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 10px 26px -14px rgba(0, 0, 0, 0.7);
+  --shadow-card-hover: 0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 16px 34px -12px rgba(0, 0, 0, 0.75);
+  --shadow-fab: 0 12px 28px -6px rgba(52, 211, 153, 0.45);
+  --shadow-pressed: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+
+  --surface-blur: 0px;
+  --font-display: var(--font-serif);
+
+  --cat-personal: #f2c572;
+  --cat-work: #34d399;
+  --cat-ideas: #b39dfb;
+  --cat-journal: #f0876b;
+  --cat-todo: #7fa8d9;
+  --cat-other: #9aa1ac;
+}
+
+[data-theme="material"] {
+  --color-canvas: #f2f2f6;
+  --bg-image: none;
+  --bg-size: auto;
+
+  --color-surface: #ffffff;
+  --color-surface-solid: #ffffff;
+
+  --color-ink: #1c1b1f;
+  --color-ink-soft: #49454f;
+  --color-ink-faint: #79747e;
+
+  --color-border: transparent;
+  --border-width: 0px;
+
+  --color-accent: #6750a4;
+  --color-accent-hover: #56438a;
+  --color-on-accent: #ffffff;
+  --color-accent-soft: #eaddff;
+
+  --radius-card: 0.85rem;
+  --radius-control: 999px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --shadow-card-hover: 0 1px 2px rgba(0, 0, 0, 0.3),
+    0 3px 8px 2px rgba(0, 0, 0, 0.18);
+  --shadow-fab: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-pressed: inset 0 1px 4px rgba(0, 0, 0, 0.2);
+
+  --surface-blur: 0px;
+  --font-display: var(--font-sans);
+
+  --cat-personal: #8a5300;
+  --cat-work: #146c2e;
+  --cat-ideas: #6750a4;
+  --cat-journal: #b3261e;
+  --cat-todo: #0061a4;
+  --cat-other: #625b71;
+}
+
+[data-theme="aurora"] {
+  --color-canvas: #120e2a;
+  --bg-image: linear-gradient(
+    135deg,
+    #120e2a 0%,
+    #2c2465 45%,
+    #1d2452 75%,
+    #0f1b3d 100%
+  );
+  --bg-size: auto;
+
+  --color-surface: rgba(255, 255, 255, 0.07);
+  --color-surface-solid: rgba(24, 20, 48, 0.92);
+
+  --color-ink: #f5f3ff;
+  --color-ink-soft: rgba(245, 243, 255, 0.68);
+  --color-ink-faint: rgba(245, 243, 255, 0.42);
+
+  --color-border: rgba(255, 255, 255, 0.12);
+  --border-width: 1px;
+
+  --color-accent: #22d3ee;
+  --color-accent-hover: #17b8d1;
+  --color-on-accent: #0b1021;
+  --color-accent-soft: rgba(34, 211, 238, 0.16);
+
+  --radius-card: 1.3rem;
+  --radius-control: 999px;
+
+  --shadow-card: 0 8px 30px -10px rgba(168, 85, 247, 0.4);
+  --shadow-card-hover: 0 14px 40px -10px rgba(168, 85, 247, 0.5);
+  --shadow-fab: 0 14px 34px -6px rgba(34, 211, 238, 0.55);
+  --shadow-pressed: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  --surface-blur: 14px;
+  --font-display: var(--font-sans);
+
+  --cat-personal: #fbbf6d;
+  --cat-work: #34d399;
+  --cat-ideas: #c084fc;
+  --cat-journal: #fb7185;
+  --cat-todo: #38bdf8;
+  --cat-other: #a5b4c3;
+}
+
+/* ==========================================================================
+   BASE STYLES
+   ========================================================================== */
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply text-ink antialiased;
+    background-color: var(--color-canvas);
+    background-image: var(--bg-image);
+    background-size: var(--bg-size);
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .tap-scale {
+    transition: transform 0.12s ease, opacity 0.12s ease,
+      box-shadow 0.15s ease, background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .tap-scale:active {
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
