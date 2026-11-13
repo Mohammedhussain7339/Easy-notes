@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/app/store/store";
@@ -35,8 +34,8 @@ interface NoteDraft {
 interface Props {
   mode: "new" | "edit";
   initialNote?: Note;
+  onSave: (draft: NoteDraft) => void | Promise<void>;
 }
-
 interface ApiResponse<T = unknown> {
   success: boolean;
   message?: string;
@@ -54,10 +53,17 @@ const CATEGORIES: Category[] = [
   "Other",
 ];
 
+const CATEGORY_COLORS: Record<Category, string> = {
+  Personal: "bg-blue-400",
+  Work: "bg-purple-400",
+  Ideas: "bg-amber-400",
+  Journal: "bg-pink-400",
+  "To-do": "bg-green-400",
+  Other: "bg-gray-400",
+};
+
 const NOTES_API =
   "https://e0c8z9dp7l.execute-api.ap-south-1.amazonaws.com/dev";
-
-const STORAGE_KEY = "Easy-notes";
 
 // ============================================
 // API REQUEST - ALL OPERATIONS USE POST
@@ -99,282 +105,73 @@ async function notesRequest<T = unknown>(
   console.log("Notes API response:", result);
 
   if (!response.ok || !result?.success) {
-    throw new Error(
-      result?.message || "Notes request failed.",
-    );
+    throw new Error(result?.message || "Notes request failed.");
   }
 
   return result as ApiResponse<T>;
 }
 
 // ============================================
-// LOCAL STORAGE FUNCTIONS
+// CREATE NOTE (API)
 // ============================================
 
-function getLocalNotes(): Note[] {
-  try {
-    const storedNotes = localStorage.getItem(STORAGE_KEY);
-
-    if (!storedNotes) return [];
-
-    const parsed = JSON.parse(storedNotes);
-
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Get local notes error:", error);
-    return [];
-  }
-}
-
-function saveLocalNotes(notes: Note[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-}
-
-// ============================================
-// GET NOTES - AWS API / LOCAL STORAGE
-// ============================================
-
-async function getNotes(userId?: string): Promise<Note[]> {
-  if (userId) {
-    const result = await notesRequest<Note[]>({
-      action: "get",
-      userId: String(userId),
-    });
-
-    return result.notes ?? [];
-  }
-
-  return getLocalNotes();
-}
-
-// ============================================
-// CREATE NOTE
-// ============================================
-
-async function createNote(
-  userId: string | undefined,
-  draft: NoteDraft,
-): Promise<void> {
-  if (userId) {
-    await notesRequest<Note>({
-      action: "create",
-      userId: String(userId),
-      ...draft,
-      pinned: false,
-    });
-
-    return;
-  }
-
-  const notes = getLocalNotes();
-  const now = new Date().toISOString();
-
-  const newNote: Note = {
-    id: crypto.randomUUID(),
+async function createNote(userId: string, draft: NoteDraft): Promise<void> {
+  await notesRequest<Note>({
+    action: "create",
+    userId,
     ...draft,
     pinned: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  saveLocalNotes([newNote, ...notes]);
+  });
 }
 
 // ============================================
-// UPDATE NOTE
+// UPDATE NOTE (API)
 // ============================================
 
 async function updateNote(
-  userId: string | undefined,
+  userId: string,
   id: string,
   draft: NoteDraft,
   pinned: boolean,
 ): Promise<void> {
-  if (userId) {
-    await notesRequest<Note>({
-      action: "update",
-      userId: String(userId),
-      id,
-      ...draft,
-      pinned,
-    });
-
-    return;
-  }
-
-  const notes = getLocalNotes();
-  const now = new Date().toISOString();
-
-  const updatedNotes = notes.map((note) =>
-    note.id === id
-      ? {
-          ...note,
-          ...draft,
-          updatedAt: now,
-        }
-      : note,
-  );
-
-  saveLocalNotes(updatedNotes);
+  await notesRequest<Note>({
+    action: "update",
+    userId,
+    id,
+    ...draft,
+    pinned,
+  });
 }
 
 // ============================================
-// DELETE NOTE
+// DELETE NOTE (API)
 // ============================================
 
-async function removeNote(
-  userId: string | undefined,
-  id: string,
-): Promise<void> {
-  if (userId) {
-    await notesRequest({
-      action: "delete",
-      userId: String(userId),
-      id,
-    });
-
-    return;
-  }
-
-  const notes = getLocalNotes();
-
-  saveLocalNotes(
-    notes.filter((note) => note.id !== id),
-  );
+async function removeNote(userId: string, id: string): Promise<void> {
+  await notesRequest({
+    action: "delete",
+    userId,
+    id,
+  });
 }
 
 // ============================================
-// NOTES LIST - SAME FILE
+// NOTE EDITOR (full-page create / edit)
+// Notes list lives in NoteCard.tsx (API based)
 // ============================================
 
-export function NotesList() {
-  const router = useRouter();
-
-  const user = useSelector((state: RootState) => state.user);
-  const userId = user?.userId;
-
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const fetchNotes = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const result = await getNotes(
-        userId ? String(userId) : undefined,
-      );
-
-      setNotes(result);
-    } catch (err) {
-      console.error("Fetch notes error:", err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to fetch notes.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    fetchNotes();
-  }, [fetchNotes]);
-
-  if (loading) {
-    return (
-      <div className="py-10 text-center text-sm text-ink-soft">
-        Loading notes...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="py-10 text-center">
-        <p className="text-sm text-red-600">{error}</p>
-
-        <button
-          onClick={fetchNotes}
-          className="mt-3 text-sm font-medium text-ink underline"
-        >
-          Try again
-        </button>
-      </div>
-    );
-  }
-
-  if (notes.length === 0) {
-    return (
-      <div className="py-10 text-center text-sm text-ink-soft">
-        No notes found.
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-3">
-      {notes.map((note) => (
-        <button
-          key={note.id}
-          type="button"
-          onClick={() => {
-            router.push(`/edit/${note.id}`);
-          }}
-          className="w-full rounded-xl border border-border p-4 text-left transition hover:bg-accent-soft"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="truncate font-semibold text-ink">
-              {note.title || "Untitled note"}
-            </h3>
-
-            <span className="shrink-0 text-xs text-ink-faint">
-              {note.updatedAt
-                ? new Date(note.updatedAt).toLocaleDateString()
-                : ""}
-            </span>
-          </div>
-
-          <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-ink-soft">
-            {note.content}
-          </p>
-
-          <span className="mt-3 inline-block rounded-full bg-accent-soft px-3 py-1 text-xs text-ink-soft">
-            {note.category}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ============================================
-// NOTE EDITOR
-// ============================================
-
-export default function NoteEditor({
-  mode,
-  initialNote,
-}: Props) {
+export default function NoteEditor({ mode, initialNote }: Props) {
   const router = useRouter();
 
   // Redux user
   const user = useSelector((state: RootState) => state.user);
 
   const userId = user?.userId;
-  const isAuthenticated = Boolean(userId);
 
   // Form states
-  const [title, setTitle] = useState(
-    initialNote?.title || "",
-  );
+  const [title, setTitle] = useState(initialNote?.title || "");
 
-  const [content, setContent] = useState(
-    initialNote?.content || "",
-  );
+  const [content, setContent] = useState(initialNote?.content || "");
 
   const [category, setCategory] = useState<Category>(
     initialNote?.category || "Personal",
@@ -383,12 +180,14 @@ export default function NoteEditor({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ============================================
   // CREATE / UPDATE NOTE
-  // ============================================
-
   async function saveNote() {
     if (!title.trim() && !content.trim()) return;
+
+    if (!userId) {
+      setError("Please sign in to save your notes.");
+      return;
+    }
 
     if (mode === "edit" && !initialNote?.id) {
       setError("Note ID is missing.");
@@ -407,20 +206,16 @@ export default function NoteEditor({
     try {
       if (mode === "new") {
         await createNote(
-          isAuthenticated ? String(userId) : undefined,
+          String(userId),
           draft,
         );
-
-        console.log("Note created successfully.");
       } else {
         await updateNote(
-          isAuthenticated ? String(userId) : undefined,
+          String(userId),
           initialNote!.id,
           draft,
           initialNote!.pinned ?? false,
         );
-
-        console.log("Note updated successfully.");
       }
 
       router.push("/");
@@ -429,21 +224,21 @@ export default function NoteEditor({
       console.error("Save note error:", err);
 
       setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong.",
+        err instanceof Error ? err.message : "Something went wrong.",
       );
     } finally {
       setLoading(false);
     }
   }
 
-  // ============================================
   // DELETE NOTE
-  // ============================================
-
   async function deleteNote() {
     if (!initialNote?.id || loading) return;
+
+    if (!userId) {
+      setError("Please sign in to delete notes.");
+      return;
+    }
 
     const confirmed = window.confirm(
       "Are you sure you want to delete this note?",
@@ -456,11 +251,9 @@ export default function NoteEditor({
 
     try {
       await removeNote(
-        isAuthenticated ? String(userId) : undefined,
+        String(userId),
         initialNote.id,
       );
-
-      console.log("Note deleted successfully.");
 
       router.push("/");
       router.refresh();
@@ -468,19 +261,14 @@ export default function NoteEditor({
       console.error("Delete note error:", err);
 
       setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong.",
+        err instanceof Error ? err.message : "Something went wrong.",
       );
     } finally {
       setLoading(false);
     }
   }
 
-  // ============================================
   // GO BACK
-  // ============================================
-
   function goBack() {
     if (
       title !== (initialNote?.title || "") ||
@@ -492,27 +280,6 @@ export default function NoteEditor({
 
     router.push("/");
   }
-
-  // ============================================
-  // CATEGORY COLORS
-  // ============================================
-
-  function getCategoryColor(cat: Category) {
-    const colors: Record<Category, string> = {
-      Personal: "bg-blue-400",
-      Work: "bg-purple-400",
-      Ideas: "bg-amber-400",
-      Journal: "bg-pink-400",
-      "To-do": "bg-green-400",
-      Other: "bg-gray-400",
-    };
-
-    return colors[cat];
-  }
-
-  // ============================================
-  // UI
-  // ============================================
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -543,8 +310,7 @@ export default function NoteEditor({
           <button
             onClick={saveNote}
             disabled={
-              loading ||
-              (!title.trim() && !content.trim())
+              loading || !userId || (!title.trim() && !content.trim())
             }
             className="flex h-10 w-10 items-center justify-center rounded-control bg-ink text-canvas disabled:opacity-40"
           >
@@ -566,10 +332,7 @@ export default function NoteEditor({
 
         {initialNote && (
           <p className="mt-1.5 font-mono text-[11px] uppercase text-ink-faint">
-            Last edited{" "}
-            {new Date(
-              initialNote.updatedAt,
-            ).toLocaleString()}
+            Last edited {new Date(initialNote.updatedAt).toLocaleString()}
           </p>
         )}
 
@@ -587,9 +350,7 @@ export default function NoteEditor({
               }`}
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${getCategoryColor(
-                  cat,
-                )}`}
+                className={`h-1.5 w-1.5 rounded-full ${CATEGORY_COLORS[cat]}`}
               />
               {cat}
             </button>
@@ -605,16 +366,16 @@ export default function NoteEditor({
           rows={12}
         />
 
-        {error && (
-          <p className="mt-3 text-sm text-red-600">
-            {error}
+        {!userId && (
+          <p className="mt-3 text-sm text-ink-soft">
+            Sign in to save notes. Notes are stored in your account.
           </p>
         )}
 
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
         {loading && (
-          <p className="mt-3 text-sm text-ink-soft">
-            Please wait...
-          </p>
+          <p className="mt-3 text-sm text-ink-soft">Please wait...</p>
         )}
       </div>
     </div>

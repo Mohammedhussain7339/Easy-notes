@@ -60,6 +60,7 @@ export function useNotes() {
       pinned: false,
       createdAt: now,
       updatedAt: now,
+      userId: ""
     };
     setNotes((prev) => [note, ...prev]);
     return note;

@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { RootState } from "@/app/store/store";
-
+import { ArrowLeft, Check, Trash2, UserRound } from "lucide-react";
 import { useNotes } from "@/lib/useNotes";
 import { CATEGORIES, Category } from "@/lib/types";
 
@@ -14,7 +14,7 @@ import NoteCard from "@/components/NoteCard";
 import EmptyState from "@/components/EmptyState";
 import FAB from "@/components/FAB";
 import SettingsLink from "@/components/SettingsLink";
-
+import { NotesList } from "@/components/NoteCard";
 export default function HomePage() {
   const { notes, isLoaded, togglePin } = useNotes();
 
@@ -92,37 +92,46 @@ export default function HomePage() {
         </div>
 
         {/* Redux User Information */}
-        {user?.userId && (
-          <div className="mb-4 flex items-center gap-3 rounded-xl border border-border p-3">
-            {user.image ? (
-              <img
-                src={user.image}
-                alt={user.name || "User"}
-                className="h-11 w-11 rounded-full object-cover"
-              />
-            ) : (
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-border font-semibold text-ink">
-                {(user.name || user.email || "U")
-                  .charAt(0)
-                  .toUpperCase()}
-              </div>
-            )}
+{user?.userId && (
+  <div className="mb-5 flex items-center gap-3 rounded-2xl border border-border bg-accent-soft/40 p-3.5 transition-colors">
+    {/* Profile Avatar */}
+    <div className="relative shrink-0">
+      {user.image ? (
+        <img
+          src={user.image}
+          alt={user.name || "User"}
+          className="h-12 w-12 rounded-full border border-border object-cover"
+        />
+      ) : (
+        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-canvas text-ink-soft">
+          <UserRound className="h-6 w-6" strokeWidth={1.7} />
+        </div>
+      )}
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink">
-                {user.name || "User"}
-              </p>
+      {/* Online Indicator */}
+      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-canvas bg-green-500" />
+    </div>
 
-              <p className="truncate text-xs text-ink-faint">
-                {user.email}
-              </p>
+    {/* User Details */}
+    <div className="min-w-0 flex-1">
+      <p className="truncate text-sm font-semibold text-ink">
+        {user.name || "Welcome"}
+      </p>
 
-              <p className="truncate font-mono text-[10px] text-ink-faint">
-                ID: {user.userId}
-              </p>
-            </div>
-          </div>
-        )}
+      <p className="mt-0.5 truncate text-xs text-ink-soft">
+        Personal workspace
+      </p>
+    </div>
+
+    {/* Account Status */}
+    <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-canvas px-2.5 py-1.5">
+      <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+      <span className="text-[11px] font-medium text-ink-soft">
+        Signed in
+      </span>
+    </div>
+  </div>
+)}
 
         <SearchBar value={query} onChange={setQuery} />
 
@@ -137,39 +146,9 @@ export default function HomePage() {
           </div>
         )}
       </header>
+            <NotesList />
 
-      {/* Content */}
-      <main className="flex-1 px-4 pt-4">
-        {!isLoaded ? null : !hasAnyNotes ? (
-          <EmptyState
-            heading="No notes yet"
-            subtext="Tap the plus button to write your first note."
-            variant="blank"
-          />
-        ) : !hasResults ? (
-          <EmptyState
-            heading="Nothing found"
-            subtext={
-              query
-                ? `No notes match "${query}". Try a different search.`
-                : "No notes in this category yet."
-            }
-            variant="search"
-          />
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {visible.map((note, i) => (
-              <li key={note.id}>
-                <NoteCard
-                  note={note}
-                  onTogglePin={togglePin}
-                  index={i}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
+
 
       {isLoaded && <FAB />}
     </div>
