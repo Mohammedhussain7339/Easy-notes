@@ -3,12 +3,9 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ComponentProps } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/app/store/store";
-
-import { useNotes } from "@/lib/useNotes";
-import type { NoteDraft } from "@/lib/types";
 
 import NoteEditor from "@/components/NoteEditor";
 import { getNotes } from "@/components/NoteCard";
@@ -19,14 +16,11 @@ type Status = "loading" | "ready" | "missing" | "signin" | "error";
 
 export default function NotePage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
 
   const id = decodeURIComponent(String(params?.id ?? ""));
 
   const user = useSelector((state: RootState) => state.user);
   const userId = user?.userId;
-
-  const { createNote, updateNote } = useNotes();
 
   const [note, setNote] = useState<EditorNote>(undefined);
   const [status, setStatus] = useState<Status>("loading");
@@ -50,6 +44,7 @@ export default function NotePage() {
 
     async function load() {
       setStatus("loading");
+      setMessage("");
 
       try {
         const notes = await getNotes(String(userId));
@@ -64,6 +59,7 @@ export default function NotePage() {
           setNote(found as unknown as EditorNote);
           setStatus("ready");
         } else {
+          setNote(undefined);
           setStatus("missing");
         }
       } catch (err) {
@@ -87,38 +83,11 @@ export default function NotePage() {
   }, [userId, id, isNew]);
 
   // ============================================
-  // CREATE NOTE
-  // ============================================
-
-  async function handleCreate(draft: NoteDraft) {
-    await createNote(draft);
-    router.push("/");
-  }
-
-  // ============================================
-  // UPDATE NOTE
-  // ============================================
-
-  async function handleUpdate(draft: NoteDraft) {
-    if (!note?.id) {
-      throw new Error("Note ID is missing.");
-    }
-
-    await updateNote(note.id, draft);
-    router.push("/");
-  }
-
-  // ============================================
   // NEW NOTE
   // ============================================
 
   if (isNew) {
-    return (
-      <NoteEditor
-        mode="new"
-        onSave={handleCreate}
-      />
-    );
+    return <NoteEditor mode="new" />;
   }
 
   // ============================================
@@ -131,7 +100,6 @@ export default function NotePage() {
         key={id}
         mode="edit"
         initialNote={note}
-        onSave={handleUpdate}
       />
     );
   }

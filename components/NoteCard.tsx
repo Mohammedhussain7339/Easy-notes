@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
-import { Pin, Trash2, RefreshCw } from "lucide-react";
+import { Paperclip, Pin, Trash2, RefreshCw } from "lucide-react";
 import type { RootState } from "@/app/store/store";
 import { Note } from "@/lib/types";
 import { categoryStyle, excerpt, formatRelativeDate } from "@/lib/utils";
@@ -81,6 +81,7 @@ function normalizeNote(raw: any): Note {
     content: raw?.content ?? "",
     category: raw?.category ?? "Other",
     pinned: Boolean(raw?.pinned),
+    attachments: Array.isArray(raw?.attachments) ? raw.attachments : [],
     createdAt,
     updatedAt: raw?.updatedAt ?? raw?.updated_at ?? createdAt,
   } as Note;
@@ -144,6 +145,8 @@ export default function NoteCard({
 }: NoteCardProps) {
   const style = categoryStyle(note.category);
   const preview = excerpt(note.content, 108);
+  const attachmentCount =
+    (note as Note & { attachments?: unknown[] }).attachments?.length ?? 0;
 
   return (
     <Link
@@ -186,8 +189,14 @@ export default function NoteCard({
           <p className="mt-1 line-clamp-2 text-[13.5px] leading-relaxed text-ink-soft">
             {preview || "No additional text"}
           </p>
-          <p className="mt-2 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
+          <p className="mt-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-ink-faint">
             {formatRelativeDate(note.updatedAt)}
+            {attachmentCount > 0 && (
+              <span className="flex items-center gap-1">
+                <Paperclip className="h-3 w-3" strokeWidth={2} />
+                {attachmentCount}
+              </span>
+            )}
           </p>
         </div>
 
