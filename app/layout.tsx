@@ -1,8 +1,8 @@
-
 import type { Metadata, Viewport } from "next";
 import { Source_Serif_4, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
+import { Toaster } from "sonner";
 
 const serif = Source_Serif_4({
   subsets: ["latin"],
@@ -58,8 +58,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${serif.variable} ${sans.variable} ${mono.variable}`}
-    >
+      className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: noFlashScript }} />
       </head>
@@ -70,6 +69,7 @@ export default function RootLayout({
             {children}
           </div>
         </Providers>
+        <Toaster position="top-center" />
       </body>
     </html>
   );

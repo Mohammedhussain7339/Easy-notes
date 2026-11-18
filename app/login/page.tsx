@@ -12,7 +12,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated" && !session?.authError) {
-      router.replace("/dashboard");
+      router.replace("/");
     }
   }, [status, session, router]);
 
@@ -21,7 +21,7 @@ export default function LoginPage() {
 
     try {
       await signIn("google", {
-        callbackUrl: "/dashboard",
+        callbackUrl: "/",
       });
     } catch (error) {
       console.error("Google login error:", error);

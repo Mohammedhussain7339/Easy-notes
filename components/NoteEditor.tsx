@@ -1,9 +1,11 @@
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/app/store/store";
+
 import {
   ArrowLeft,
   Check,
@@ -15,6 +17,10 @@ import {
   X,
 } from "lucide-react";
 
+// ============================================
+// TYPES
+// ============================================
+
 type Category =
   | "Personal"
   | "Work"
@@ -25,10 +31,11 @@ type Category =
 
 interface Attachment {
   id: string;
-  name: string;
-  type: string;
+  fileName: string;
+  contentType: string;
   size: number;
-  key: string; // S3 object key
+  key: string;
+  uploadedAt?: string;
 }
 
 interface UploadItem {
@@ -36,6 +43,11 @@ interface UploadItem {
   name: string;
   progress: number;
   error?: string;
+}
+
+interface PendingFile {
+  id: string;
+  file: File;
 }
 
 interface Note {
@@ -54,22 +66,35 @@ interface NoteDraft {
   title: string;
   content: string;
   category: Category;
-  attachments: Attachment[];
 }
 
 interface Props {
   mode: "new" | "edit";
   initialNote?: Note;
-}interface ApiResponse<T = unknown> {
+}
+
+interface ApiResponse<T = unknown> {
   success: boolean;
   message?: string;
   note?: T;
   notes?: Note[];
-  deleted?: { id: string };
   uploadUrl?: string;
-  url?: string;
+  fields?: Record<string, string>;
   key?: string;
+  downloadUrl?: string;
+  attachment?: Attachment;
+  attachments?: Attachment[];
 }
+
+interface UploadUrlResult {
+  uploadUrl: string;
+  fields: Record<string, string>;
+  key: string;
+}
+
+// ============================================
+// CONSTANTS
+// ============================================
 
 const CATEGORIES: Category[] = [
   "Personal",
@@ -89,27 +114,36 @@ const CATEGORY_COLORS: Record<Category, string> = {
   Other: "bg-gray-400",
 };
 
-// ---- Attachment limits ----
 const MAX_FILES = 5;
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const ACCEPT =
-  ".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip";
+  ".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx";
 
 const ALLOWED_EXT = ACCEPT.split(",").map((e) => e.slice(1));
+
+const MIME_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx:
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
 
 const NOTES_API =
   "https://e0c8z9dp7l.execute-api.ap-south-1.amazonaws.com/dev";
 
 // ============================================
-// API REQUEST - ALL OPERATIONS USE POST
+// API REQUEST
 // ============================================
 
 async function notesRequest<T = unknown>(
   data: Record<string, unknown>,
 ): Promise<ApiResponse<T>> {
-  console.log("Notes API request:", data);
-
   const response = await fetch(NOTES_API, {
     method: "POST",
     headers: {
@@ -138,215 +172,63 @@ async function notesRequest<T = unknown>(
     throw new Error("Invalid server response.");
   }
 
-  console.log("Notes API response:", result);
-
   if (!response.ok || !result?.success) {
-    throw new Error(result?.message || "Notes request failed.");
+    throw new Error(
+      result?.message || "Notes request failed.",
+    );
   }
 
   return result as ApiResponse<T>;
 }
 
 // ============================================
-// ATTACHMENT HELPERS (S3 via pre-signed URLs)
+// FILE HELPERS
 // ============================================
 
-function fileExt(name: string) {
+function fileExt(name: string): string {
   return name.split(".").pop()?.toLowerCase() ?? "";
 }
 
-function formatSize(bytes: number) {
+function getContentType(file: File): string {
+  const extension = fileExt(file.name);
+
+  return MIME_TYPES[extension] || file.type;
+}
+
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-async function requestUploadUrl(userId: string, file: File) {
-  const result = await notesRequest({
-    action: "getUploadUrl",
-    userId,
-    fileName: file.name,
-    fileType: file.type || "application/octet-stream",
-    fileSize: file.size,
-  });
-
-  if (!result.uploadUrl || !result.key) {
-    throw new Error("Upload URL missing from server response.");
-  }
-
-  return { uploadUrl: result.uploadUrl, key: result.key };
-}
-
-function putFile(
-  url: string,
-  file: File,
-  onProgress: (percent: number) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-
-    xhr.open("PUT", url);
-    xhr.setRequestHeader(
-      "Content-Type",
-      file.type || "application/octet-stream",
-    );
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    };
-
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`Upload failed (${xhr.status}).`));
-
-    xhr.onerror = () =>
-      reject(new Error("Upload failed. Check your connection."));
-
-    xhr.send(file);
-  });
-}
-
-async function fetchDownloadUrl(userId: string, key: string) {
-  const result = await notesRequest({
-    action: "getDownloadUrl",
-    userId,
-    key,
-  });
-
-  if (!result.url) throw new Error("Download URL missing.");
-
-  return result.url;
-}
-
 // ============================================
-// ATTACHMENT ROW
+// CREATE NOTE
 // ============================================
 
-interface AttachmentRowProps {
-  attachment: Attachment;
-  userId?: string;
-  disabled: boolean;
-  onRemove: () => void;
-  onError: (message: string) => void;
-}
-
-function AttachmentRow({
-  attachment,
-  userId,
-  disabled,
-  onRemove,
-  onError,
-}: AttachmentRowProps) {
-  const isImage = attachment.type.startsWith("image/");
-  const isPdfOrDoc =
-    attachment.type === "application/pdf" ||
-    attachment.type.startsWith("text/") ||
-    /word|sheet|presentation|excel|powerpoint/.test(attachment.type);
-
-  const [thumb, setThumb] = useState("");
-  const [opening, setOpening] = useState(false);
-
-  useEffect(() => {
-    if (!isImage || !userId) return;
-
-    let cancelled = false;
-
-    fetchDownloadUrl(userId, attachment.key)
-      .then((url) => {
-        if (!cancelled) setThumb(url);
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isImage, userId, attachment.key]);
-
-  async function openFile() {
-    if (!userId || opening) return;
-
-    setOpening(true);
-
-    try {
-      const url = await fetchDownloadUrl(userId, attachment.key);
-
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      onError(
-        err instanceof Error ? err.message : "Couldn't open this file.",
-      );
-    } finally {
-      setOpening(false);
-    }
-  }
-
-  return (
-    <li className="flex items-center gap-3 rounded-card border-theme border-border bg-surface p-2">
-      <button
-        type="button"
-        onClick={openFile}
-        disabled={opening}
-        aria-label={`Open ${attachment.name}`}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-accent-soft text-ink-soft">
-          {isImage && thumb ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={thumb}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : isImage ? (
-            <ImageIcon className="h-5 w-5" />
-          ) : isPdfOrDoc ? (
-            <FileText className="h-5 w-5" />
-          ) : (
-            <FileIcon className="h-5 w-5" />
-          )}
-        </span>
-
-        <span className="min-w-0">
-          <span className="block truncate text-[13.5px] font-medium text-ink">
-            {attachment.name}
-          </span>
-          <span className="block font-mono text-[11px] uppercase text-ink-faint">
-            {opening ? "Opening..." : formatSize(attachment.size)}
-          </span>
-        </span>
-      </button>
-
-      <button
-        type="button"
-        onClick={onRemove}
-        disabled={disabled}
-        aria-label={`Remove ${attachment.name}`}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </li>
-  );
-}
-
-// ============================================
-// CREATE NOTE (API)
-// ============================================
-
-async function createNote(userId: string, draft: NoteDraft): Promise<void> {
-  await notesRequest<Note>({
+async function createNote(
+  userId: string,
+  draft: NoteDraft,
+): Promise<Note> {
+  const result = await notesRequest<Note>({
     action: "create",
     userId,
     ...draft,
     pinned: false,
   });
+
+  if (!result.note?.id) {
+    throw new Error("Note ID was not returned by the server.");
+  }
+
+  return result.note;
 }
 
 // ============================================
-// UPDATE NOTE (API)
+// UPDATE NOTE
 // ============================================
 
 async function updateNote(
@@ -355,7 +237,7 @@ async function updateNote(
   draft: NoteDraft,
   pinned: boolean,
 ): Promise<void> {
-  await notesRequest<Note>({
+  await notesRequest({
     action: "update",
     userId,
     id,
@@ -365,10 +247,13 @@ async function updateNote(
 }
 
 // ============================================
-// DELETE NOTE (API)
+// DELETE NOTE
 // ============================================
 
-async function removeNote(userId: string, id: string): Promise<void> {
+async function removeNote(
+  userId: string,
+  id: string,
+): Promise<void> {
   await notesRequest({
     action: "delete",
     userId,
@@ -377,22 +262,326 @@ async function removeNote(userId: string, id: string): Promise<void> {
 }
 
 // ============================================
-// NOTE EDITOR (full-page create / edit)
-// Notes list lives in NoteCard.tsx (API based)
+// GENERATE S3 UPLOAD URL
 // ============================================
 
-export default function NoteEditor({ mode, initialNote }: Props) {
+async function requestUploadUrl(
+  userId: string,
+  noteId: string,
+  file: File,
+): Promise<UploadUrlResult> {
+  const result = await notesRequest({
+    action: "upload-url",
+    userId,
+    noteId,
+    fileName: file.name,
+    contentType: getContentType(file),
+  });
+
+  if (
+    !result.uploadUrl ||
+    !result.key ||
+    !result.fields
+  ) {
+    throw new Error("Upload URL or fields missing from server.");
+  }
+
+  return {
+    uploadUrl: result.uploadUrl,
+    fields: result.fields,
+    key: result.key,
+  };
+}
+
+// ============================================
+// UPLOAD FILE TO S3 USING PRESIGNED POST
+// ============================================
+
+function uploadToS3(
+  uploadUrl: string,
+  fields: Record<string, string>,
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    const formData = new FormData();
+
+    // Append all presigned fields first
+    Object.entries(fields).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
+
+    // File must be appended last
+    formData.append("file", file);
+
+    xhr.open("POST", uploadUrl);
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(
+          Math.round((event.loaded / event.total) * 100),
+        );
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(
+          new Error(`S3 upload failed (${xhr.status}).`),
+        );
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(
+        new Error("Upload failed. Check your connection or S3 CORS."),
+      );
+    };
+
+    xhr.send(formData);
+  });
+}
+
+// ============================================
+// COMPLETE UPLOAD
+// ============================================
+
+async function completeUpload(
+  userId: string,
+  noteId: string,
+  key: string,
+  fileName: string,
+): Promise<Attachment> {
+  const result = await notesRequest({
+    action: "complete-upload",
+    userId,
+    noteId,
+    key,
+    fileName,
+  });
+
+  if (!result.attachment) {
+    throw new Error("Attachment metadata was not returned.");
+  }
+
+  return result.attachment;
+}
+
+// ============================================
+// GET DOWNLOAD URL
+// ============================================
+
+async function fetchDownloadUrl(
+  userId: string,
+  noteId: string,
+  attachmentId: string,
+): Promise<string> {
+  const result = await notesRequest({
+    action: "get-download-url",
+    userId,
+    noteId,
+    attachmentId,
+  });
+
+  if (!result.downloadUrl) {
+    throw new Error("Download URL missing.");
+  }
+
+  return result.downloadUrl;
+}
+
+// ============================================
+// DELETE ATTACHMENT
+// ============================================
+
+async function deleteAttachment(
+  userId: string,
+  noteId: string,
+  attachmentId: string,
+): Promise<void> {
+  await notesRequest({
+    action: "delete-attachment",
+    userId,
+    noteId,
+    attachmentId,
+  });
+}
+
+// ============================================
+// ATTACHMENT ROW
+// ============================================
+
+interface AttachmentRowProps {
+  attachment: Attachment;
+  userId?: string;
+  noteId: string;
+  disabled: boolean;
+  onRemove: () => void;
+  onError: (message: string) => void;
+}
+
+
+function AttachmentRow({
+  attachment,
+  userId,
+  noteId,
+  disabled,
+  onRemove,
+  onError,
+}: AttachmentRowProps) {
+  const isImage = attachment.contentType.startsWith("image/");
+
+  const [thumb, setThumb] = useState("");
+  const [opening, setOpening] = useState(false);
+
+  useEffect(() => {
+    if (!isImage || !userId || !noteId) return;
+
+    let cancelled = false;
+
+    fetchDownloadUrl(userId, noteId, attachment.id)
+      .then((url) => {
+        if (!cancelled) setThumb(url);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isImage, userId, noteId, attachment.id]);
+
+  async function openFile() {
+    if (!userId || opening) return;
+
+    setOpening(true);
+
+    try {
+      const url = thumb || await fetchDownloadUrl(
+        userId,
+        noteId,
+        attachment.id
+      );
+
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      onError(
+        err instanceof Error
+          ? err.message
+          : "Couldn't open this file."
+      );
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  // Image preview card
+  if (isImage) {
+    return (
+      <li className="group relative min-w-0 overflow-hidden rounded-2xl border border-border bg-surface">
+        <button
+          type="button"
+          onClick={openFile}
+          disabled={opening}
+          aria-label="Open image attachment"
+          className="block w-full text-left"
+        >
+          <div className="relative aspect-[4/3] w-full overflow-hidden bg-accent-soft">
+            {thumb ? (
+              <img
+                src={thumb}
+                alt="Image attachment"
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <ImageIcon className="h-8 w-8 text-ink-faint" />
+              </div>
+            )}
+
+            {opening && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-sm text-white">
+                Opening...
+              </div>
+            )}
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={disabled}
+          aria-label="Remove image"
+          className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition hover:bg-red-500 disabled:opacity-40"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </li>
+    );
+  }
+
+  // Document attachment
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
+      <button
+        type="button"
+        onClick={openFile}
+        disabled={opening}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-ink-soft">
+          <FileText className="h-5 w-5" />
+        </span>
+
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-ink">
+            {attachment.fileName}
+          </span>
+          <span className="text-xs text-ink-faint">
+            {opening ? "Opening..." : formatSize(attachment.size)}
+          </span>
+        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={disabled}
+        aria-label="Remove attachment"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </li>
+  );
+}
+
+
+// ============================================
+// NOTE EDITOR
+// ============================================
+
+export default function NoteEditor({
+  mode,
+  initialNote,
+}: Props) {
   const router = useRouter();
 
-  // Redux user
   const user = useSelector((state: RootState) => state.user);
 
   const userId = user?.userId;
 
   // Form states
-  const [title, setTitle] = useState(initialNote?.title || "");
+  const [title, setTitle] = useState(
+    initialNote?.title || "",
+  );
 
-  const [content, setContent] = useState(initialNote?.content || "");
+  const [content, setContent] = useState(
+    initialNote?.content || "",
+  );
 
   const [category, setCategory] = useState<Category>(
     initialNote?.category || "Personal",
@@ -401,62 +590,125 @@ export default function NoteEditor({ mode, initialNote }: Props) {
   const [attachments, setAttachments] = useState<Attachment[]>(
     initialNote?.attachments ?? [],
   );
+
+  // Files waiting to be uploaded for a new note
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>(
+    [],
+  );
+
+  // Active and failed uploads
   const [uploads, setUploads] = useState<UploadItem[]>([]);
+
+  // A new note is created before its attachments are uploaded
+  const [persistedNoteId, setPersistedNoteId] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const activeUploads = uploads.filter((u) => !u.error).length;
+  const noteId =
+    mode === "edit"
+      ? initialNote?.id || ""
+      : persistedNoteId;
+
+  const activeUploads = uploads.filter(
+    (upload) => !upload.error,
+  ).length;
+
   const uploading = activeUploads > 0;
 
-  // ATTACHMENTS
-  async function uploadOne(file: File) {
+  const totalAttachments =
+    attachments.length +
+    pendingFiles.length +
+    activeUploads;
+
+  // ============================================
+  // UPLOAD ONE FILE
+  // ============================================
+
+  async function uploadOne(
+    file: File,
+    targetNoteId: string,
+  ): Promise<boolean> {
     const tempId = crypto.randomUUID();
 
     setUploads((list) => [
       ...list,
-      { id: tempId, name: file.name, progress: 0 },
+      {
+        id: tempId,
+        name: file.name,
+        progress: 0,
+      },
     ]);
 
     try {
-      const { uploadUrl, key } = await requestUploadUrl(
-        String(userId),
+      // 1. Get presigned POST URL
+      const { uploadUrl, fields, key } =
+        await requestUploadUrl(
+          String(userId),
+          targetNoteId,
+          file,
+        );
+
+      // 2. Upload file directly to S3
+      await uploadToS3(
+        uploadUrl,
+        fields,
         file,
+        (progress) => {
+          setUploads((list) =>
+            list.map((upload) =>
+              upload.id === tempId
+                ? { ...upload, progress }
+                : upload,
+            ),
+          );
+        },
       );
 
-      await putFile(uploadUrl, file, (progress) =>
-        setUploads((list) =>
-          list.map((u) => (u.id === tempId ? { ...u, progress } : u)),
-        ),
+      // 3. Register attachment in DynamoDB
+      const attachment = await completeUpload(
+        String(userId),
+        targetNoteId,
+        key,
+        file.name,
       );
 
       setAttachments((list) => [
         ...list,
-        {
-          id: crypto.randomUUID(),
-          name: file.name,
-          type: file.type || "application/octet-stream",
-          size: file.size,
-          key,
-        },
+        attachment,
       ]);
 
-      setUploads((list) => list.filter((u) => u.id !== tempId));
-    } catch (err) {
       setUploads((list) =>
-        list.map((u) =>
-          u.id === tempId
+        list.filter((upload) => upload.id !== tempId),
+      );
+
+      return true;
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Upload failed.";
+
+      setUploads((list) =>
+        list.map((upload) =>
+          upload.id === tempId
             ? {
-                ...u,
-                error:
-                  err instanceof Error ? err.message : "Upload failed.",
+                ...upload,
+                error: message,
               }
-            : u,
+            : upload,
         ),
       );
+
+      return false;
     }
   }
+
+  // ============================================
+  // HANDLE FILE SELECTION
+  // ============================================
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
@@ -468,23 +720,39 @@ export default function NoteEditor({ mode, initialNote }: Props) {
 
     setError("");
 
-    let slots = MAX_FILES - attachments.length - activeUploads;
+    let slots =
+      MAX_FILES -
+      attachments.length -
+      pendingFiles.length -
+      activeUploads;
+
     const problems: string[] = [];
     const accepted: File[] = [];
 
     for (const file of Array.from(fileList)) {
       if (slots <= 0) {
-        problems.push(`Only ${MAX_FILES} files fit in one note.`);
+        problems.push(
+          `Only ${MAX_FILES} files fit in one note.`,
+        );
         break;
       }
 
       if (!ALLOWED_EXT.includes(fileExt(file.name))) {
-        problems.push(`${file.name}: this file type isn't supported.`);
+        problems.push(
+          `${file.name}: this file type isn't supported.`,
+        );
+        continue;
+      }
+
+      if (file.size === 0) {
+        problems.push(`${file.name}: empty files aren't allowed.`);
         continue;
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        problems.push(`${file.name}: larger than 10 MB.`);
+        problems.push(
+          `${file.name}: larger than 10 MB.`,
+        );
         continue;
       }
 
@@ -492,12 +760,37 @@ export default function NoteEditor({ mode, initialNote }: Props) {
       slots -= 1;
     }
 
-    if (problems.length > 0) setError(problems.join(" "));
+    if (problems.length > 0) {
+      setError(problems.join(" "));
+    }
 
-    await Promise.all(accepted.map(uploadOne));
+    if (accepted.length === 0) return;
+
+    // New note: stage files until the note has been created
+    if (mode === "new" && !noteId) {
+      const staged = accepted.map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+      }));
+
+      setPendingFiles((list) => [
+        ...list,
+        ...staged,
+      ]);
+
+      return;
+    }
+
+    // Existing note: upload immediately
+    for (const file of accepted) {
+      await uploadOne(file, noteId);
+    }
   }
 
-  // CREATE / UPDATE NOTE
+  // ============================================
+  // SAVE NOTE
+  // ============================================
+
   async function saveNote() {
     if (!title.trim() && !content.trim()) return;
 
@@ -506,7 +799,7 @@ export default function NoteEditor({ mode, initialNote }: Props) {
       return;
     }
 
-    if (uploading) {
+    if (uploading || loading) {
       setError("Wait for your files to finish uploading.");
       return;
     }
@@ -523,22 +816,51 @@ export default function NoteEditor({ mode, initialNote }: Props) {
       title: title.trim() || "Untitled note",
       content: content.trim(),
       category,
-      attachments,
     };
 
     try {
-      if (mode === "new") {
-        await createNote(
+      let targetNoteId = noteId;
+
+      if (mode === "new" && !targetNoteId) {
+        // 1. Create note first
+        const createdNote = await createNote(
           String(userId),
           draft,
         );
-      } else {
+
+        targetNoteId = createdNote.id;
+
+        setPersistedNoteId(targetNoteId);
+      } else if (targetNoteId) {
+        // Update existing or previously created note
         await updateNote(
           String(userId),
-          initialNote!.id,
+          targetNoteId,
           draft,
-          initialNote!.pinned ?? false,
+          initialNote?.pinned ?? false,
         );
+      }
+
+      // 2. Upload pending files after note creation
+      if (pendingFiles.length > 0) {
+        const filesToUpload = [...pendingFiles];
+
+        for (const pending of filesToUpload) {
+          const success = await uploadOne(
+            pending.file,
+            targetNoteId,
+          );
+
+          if (!success) {
+            throw new Error(
+              `Could not upload ${pending.file.name}. You can retry by saving again.`,
+            );
+          }
+
+          setPendingFiles((list) =>
+            list.filter((item) => item.id !== pending.id),
+          );
+        }
       }
 
       router.push("/");
@@ -547,14 +869,55 @@ export default function NoteEditor({ mode, initialNote }: Props) {
       console.error("Save note error:", err);
 
       setError(
-        err instanceof Error ? err.message : "Something went wrong.",
+        err instanceof Error
+          ? err.message
+          : "Something went wrong.",
       );
     } finally {
       setLoading(false);
     }
   }
 
+  // ============================================
+  // REMOVE ATTACHMENT
+  // ============================================
+
+  async function handleRemoveAttachment(
+    attachmentId: string,
+  ) {
+    if (!userId || !noteId || loading) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to remove this attachment?",
+    );
+
+    if (!confirmed) return;
+
+    setError("");
+
+    try {
+      await deleteAttachment(
+        String(userId),
+        noteId,
+        attachmentId,
+      );
+
+      setAttachments((list) =>
+        list.filter((item) => item.id !== attachmentId),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not remove attachment.",
+      );
+    }
+  }
+
+  // ============================================
   // DELETE NOTE
+  // ============================================
+
   async function deleteNote() {
     if (!initialNote?.id || loading) return;
 
@@ -584,27 +947,57 @@ export default function NoteEditor({ mode, initialNote }: Props) {
       console.error("Delete note error:", err);
 
       setError(
-        err instanceof Error ? err.message : "Something went wrong.",
+        err instanceof Error
+          ? err.message
+          : "Something went wrong.",
       );
     } finally {
       setLoading(false);
     }
   }
 
+  // ============================================
+  // REMOVE PENDING FILE
+  // ============================================
+
+  function removePendingFile(id: string) {
+    setPendingFiles((list) =>
+      list.filter((item) => item.id !== id),
+    );
+  }
+
+  // ============================================
   // GO BACK
+  // ============================================
+
   function goBack() {
-    if (
+    const originalAttachments = (
+      initialNote?.attachments ?? []
+    )
+      .map((attachment) => attachment.key)
+      .join();
+
+    const currentAttachments = attachments
+      .map((attachment) => attachment.key)
+      .join();
+
+    const hasChanges =
       title !== (initialNote?.title || "") ||
       content !== (initialNote?.content || "") ||
       category !== (initialNote?.category || "Personal") ||
-      attachments.map((a) => a.key).join() !==
-        (initialNote?.attachments ?? []).map((a) => a.key).join()
-    ) {
+      currentAttachments !== originalAttachments ||
+      pendingFiles.length > 0;
+
+    if (hasChanges) {
       if (!window.confirm("Discard your changes?")) return;
     }
 
     router.push("/");
   }
+
+  // ============================================
+  // UI
+  // ============================================
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -638,7 +1031,9 @@ export default function NoteEditor({ mode, initialNote }: Props) {
               loading ||
               uploading ||
               !userId ||
-              (!title.trim() && !content.trim())
+              (!title.trim() &&
+                !content.trim() &&
+                pendingFiles.length === 0)
             }
             className="flex h-10 w-10 items-center justify-center rounded-control bg-ink text-canvas disabled:opacity-40"
           >
@@ -660,7 +1055,10 @@ export default function NoteEditor({ mode, initialNote }: Props) {
 
         {initialNote && (
           <p className="mt-1.5 font-mono text-[11px] uppercase text-ink-faint">
-            Last edited {new Date(initialNote.updatedAt).toLocaleString()}
+            Last edited{" "}
+            {new Date(
+              initialNote.updatedAt,
+            ).toLocaleString()}
           </p>
         )}
 
@@ -694,13 +1092,14 @@ export default function NoteEditor({ mode, initialNote }: Props) {
           rows={12}
         />
 
-        {/* Attachments */}
+        {/* ATTACHMENTS */}
+
         <div className="mt-5">
           <div className="flex items-center justify-between gap-3">
             <span className="font-mono text-[11px] uppercase text-ink-faint">
               Attachments
-              {attachments.length > 0 &&
-                ` (${attachments.length}/${MAX_FILES})`}
+              {totalAttachments > 0 &&
+                ` (${totalAttachments}/${MAX_FILES})`}
             </span>
 
             <button
@@ -709,7 +1108,7 @@ export default function NoteEditor({ mode, initialNote }: Props) {
               disabled={
                 loading ||
                 !userId ||
-                attachments.length + activeUploads >= MAX_FILES
+                totalAttachments >= MAX_FILES
               }
               className="flex h-9 items-center gap-1.5 rounded-control border-theme border-border px-3 text-[13px] font-medium text-ink-soft hover:bg-accent-soft disabled:opacity-40"
             >
@@ -731,26 +1130,72 @@ export default function NoteEditor({ mode, initialNote }: Props) {
           </div>
 
           <p className="mt-1 text-xs text-ink-faint">
-            Images, PDF, Word, Excel, PowerPoint, text, CSV or ZIP. Up to{" "}
+            JPG, PNG, WebP, GIF, PDF, DOC or DOCX. Up to{" "}
             {MAX_FILES} files, 10 MB each.
           </p>
 
-          {(attachments.length > 0 || uploads.length > 0) && (
-            <ul className="mt-3 grid gap-2">
+          {(attachments.length > 0 ||
+            pendingFiles.length > 0 ||
+            uploads.length > 0) && (
+<ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">              {/* SAVED ATTACHMENTS */}
+
               {attachments.map((attachment) => (
                 <AttachmentRow
                   key={attachment.id}
                   attachment={attachment}
-                  userId={userId ? String(userId) : undefined}
+                  userId={
+                    userId ? String(userId) : undefined
+                  }
+                  noteId={noteId}
                   disabled={loading}
                   onRemove={() =>
-                    setAttachments((list) =>
-                      list.filter((a) => a.id !== attachment.id),
-                    )
+                    handleRemoveAttachment(attachment.id)
                   }
                   onError={setError}
                 />
               ))}
+
+              {/* FILES WAITING TO UPLOAD */}
+
+              {pendingFiles.map((pending) => (
+                <li
+                  key={pending.id}
+                  className="flex items-center gap-3 rounded-card border-theme border-border bg-surface p-3"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-ink-soft">
+                    {pending.file.type.startsWith("image/") ? (
+                      <ImageIcon className="h-5 w-5" />
+                    ) : (
+                      <FileIcon className="h-5 w-5" />
+                    )}
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-medium text-ink">
+                      {pending.file.name}
+                    </span>
+
+                    <span className="block text-[11px] text-ink-faint">
+                      Ready to upload ·{" "}
+                      {formatSize(pending.file.size)}
+                    </span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      removePendingFile(pending.id)
+                    }
+                    disabled={loading}
+                    aria-label={`Remove ${pending.file.name}`}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+
+              {/* UPLOAD PROGRESS */}
 
               {uploads.map((upload) => (
                 <li
@@ -767,7 +1212,9 @@ export default function NoteEditor({ mode, initialNote }: Props) {
                         type="button"
                         onClick={() =>
                           setUploads((list) =>
-                            list.filter((u) => u.id !== upload.id),
+                            list.filter(
+                              (item) => item.id !== upload.id,
+                            ),
                           )
                         }
                         className="shrink-0 text-xs font-medium text-ink underline"
@@ -789,7 +1236,9 @@ export default function NoteEditor({ mode, initialNote }: Props) {
                     <div className="mt-2 h-1 overflow-hidden rounded-full bg-accent-soft">
                       <div
                         className="h-full rounded-full bg-ink transition-all"
-                        style={{ width: `${upload.progress}%` }}
+                        style={{
+                          width: `${upload.progress}%`,
+                        }}
                       />
                     </div>
                   )}
@@ -805,10 +1254,16 @@ export default function NoteEditor({ mode, initialNote }: Props) {
           </p>
         )}
 
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {error && (
+          <p className="mt-3 text-sm text-red-600">
+            {error}
+          </p>
+        )}
 
         {loading && (
-          <p className="mt-3 text-sm text-ink-soft">Please wait...</p>
+          <p className="mt-3 text-sm text-ink-soft">
+            Please wait...
+          </p>
         )}
       </div>
     </div>
