@@ -1,4 +1,3 @@
-
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 
@@ -35,11 +34,13 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          const apiUrl = process.env.AWS_AUTH_API_URL;
+          const apiUrl = "https://ktnb0w0dh3.execute-api.ap-south-1.amazonaws.com/dev";
 
           if (!apiUrl) {
             throw new Error("AWS_AUTH_API_URL is not configured");
           }
+          console.log("AWS AUTH API URL configured:", !!apiUrl);
+          console.log("Calling AWS authentication API...");
 
           const response = await fetch(apiUrl, {
             method: "POST",
