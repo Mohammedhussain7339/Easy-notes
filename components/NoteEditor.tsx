@@ -1962,6 +1962,6 @@ export default function NoteEditor({ mode, initialNote }: Props) {
           }}
         />
       )}
-    </div>
+     </div>
   );
 }
