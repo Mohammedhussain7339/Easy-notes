@@ -30,7 +30,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#F6F4EF] px-4">
+    <main className="flex min-h-dvh items-center justify-center  px-4">
       <div className="w-full max-w-md rounded-2xl border border-[#e5e0d6] bg-white p-8 text-center shadow-sm">
         <h1 className="font-serif text-4xl font-semibold text-[#292720]">
           Marginalia

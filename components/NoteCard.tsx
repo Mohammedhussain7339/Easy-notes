@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
-import { Paperclip, Pin, Trash2, RefreshCw } from "lucide-react";
+import { Paperclip, Pin, Trash2, RefreshCw, ArrowRight } from "lucide-react";
 import type { RootState } from "@/app/store/store";
 import { Note } from "@/lib/types";
 import { categoryStyle, excerpt, formatRelativeDate } from "@/lib/utils";
@@ -421,19 +421,41 @@ export function NotesList() {
   // STATES
   // ----------------------------------------
 
-  if (!userId) {
-    return (
-      <div className="rounded-card border-theme border-border bg-surface px-6 py-12 text-center shadow-card">
-        <p className="font-display text-[17px] font-semibold text-ink">
-          Sign in to see your notes
-        </p>
-        <p className="mt-1 text-[13.5px] leading-relaxed text-ink-soft">
-          Your notes are saved to your account and load from there.
-        </p>
-      </div>
-    );
-  }
 
+if (!userId) {
+  return (
+    <div className="rounded-card border-theme border-border bg-surface px-6 py-12 text-center shadow-card">
+      <p className="font-display text-[17px] font-semibold text-ink">
+        Sign in to see your notes
+      </p>
+
+      <p className="mt-1 text-[13.5px] leading-relaxed text-ink-soft">
+        Your notes are saved to your account and load from there.
+      </p>
+
+<Link
+  href="/login"
+  className="
+    group mt-6 inline-flex items-center justify-center gap-2
+    rounded-xl border border-border/60
+    bg-surface px-7 py-3
+    text-[13px] font-semibold tracking-wide text-ink
+    shadow-[5px_5px_10px_var(--neu-shadow-dark),-5px_-5px_10px_var(--neu-shadow-light)]
+    transition-all duration-300
+    hover:-translate-y-0.5
+    hover:shadow-[7px_7px_14px_var(--neu-shadow-dark),-7px_-7px_14px_var(--neu-shadow-light)]
+    active:translate-y-0
+    active:shadow-[inset_4px_4px_8px_var(--neu-shadow-dark),inset_-4px_-4px_8px_var(--neu-shadow-light)]
+  "
+>
+  <span>Login to Your Account</span>
+  <ArrowRight
+    size={16}
+    className="transition-transform duration-300 group-hover:translate-x-1"
+  />
+</Link>    </div>
+  );
+}
   if (loading) {
     return (
       <div className="grid gap-3" role="status" aria-label="Loading notes">
